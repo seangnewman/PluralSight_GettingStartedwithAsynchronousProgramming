@@ -18,7 +18,7 @@ namespace StockAnalyzer.Windows
             InitializeComponent();
         }
 
-        private void Search_Click(object sender, RoutedEventArgs e)
+        private async void Search_Click(object sender, RoutedEventArgs e)
         {
             #region Before loading stock data
             var watch = new Stopwatch();
@@ -26,15 +26,16 @@ namespace StockAnalyzer.Windows
             StockProgress.Visibility = Visibility.Visible;
             StockProgress.IsIndeterminate = true;
             #endregion
+            try
+            {
+                await GetStocks();
+            }
+            catch (Exception ex )
+            {
 
-            var client = new WebClient();
-
-            var content = client.DownloadString($"http://localhost:61363/api/stocks/{Ticker.Text}");
-
-            var data = JsonConvert.DeserializeObject<IEnumerable<StockPrice>>(content);
-
-            Stocks.ItemsSource = data;
-
+                Notes.Text += ex.Message;
+            }
+           
             #region After stock data is loaded
             StocksStatus.Text = $"Loaded stocks for {Ticker.Text} in {watch.ElapsedMilliseconds}ms";
             StockProgress.Visibility = Visibility.Hidden;
@@ -51,6 +52,34 @@ namespace StockAnalyzer.Windows
         private void Close_OnClick(object sender, RoutedEventArgs e)
         {
             Application.Current.Shutdown();
+        }
+
+        // By marking as async we introduce capability to use 
+        public async Task GetStocks()
+        {
+            using (var client = new HttpClient())
+            {
+                //Get the http response message
+                // Pause execution until the result is available
+                // await introduces continuation that allows us to get back to main thread
+                var response = await client.GetAsync($"http://localhost:61363/api/stocks/{Ticker.Text}");
+                try
+                {
+                    // Catch an exception if the response is not successful 
+                    response.EnsureSuccessStatusCode();
+                    // We need to await until the async ReadAsString has completed
+                    var content = await response.Content.ReadAsStringAsync();
+                    var data = JsonConvert.DeserializeObject<IEnumerable<StockPrice>>(content);
+
+                    Stocks.ItemsSource = data;
+                }
+                catch (Exception ex)
+                {
+                    // If an exception occurs, we are back to the main UI thread that allows us to record messages
+                    Notes.Text += ex.Message;
+                }
+            }  // end using
+
         }
     }
 }
