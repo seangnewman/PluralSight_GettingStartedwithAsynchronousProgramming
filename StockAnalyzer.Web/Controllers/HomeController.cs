@@ -33,8 +33,5 @@ namespace StockAnalyzer.Web.Controllers
 
             return View(data[ticker]);
         }
-
-      
-
     }
 }
