@@ -24,7 +24,7 @@ namespace StockAnalyzer.Windows
         }
 
         CancellationTokenSource cancellationTokenSource = null;
-
+        static object syncRoot = new object();
         private async void Search_Click(object sender, RoutedEventArgs e)
         {
             #region Before loading stock data
@@ -69,7 +69,24 @@ namespace StockAnalyzer.Windows
                 #endregion
 
                 var loadedStocks = (await Task.WhenAll(tickerLoadingTasks));
+                  
+                decimal  total = 0;
 
+                Parallel.ForEach(loadedStocks, stocks =>
+                {
+                    var value = 0m;
+                    foreach (var stock in stocks)
+                    {
+                        value += Compute(stock);
+                    }
+                    lock (syncRoot)
+                        {
+                            total += value;
+                        }
+                    
+                } );
+
+                #region  Normal ForEach Processing
                 // var values = new List<StockCalculation>();
 
                 // Normal foreach
@@ -83,25 +100,25 @@ namespace StockAnalyzer.Windows
                 //    };
                 //    values.Add(data);
                 //}
+                #endregion
+                #region Parallel ForEach Processing
+                ////ConcurrentBag is a thread safe collection
+                //var values = new ConcurrentBag<StockCalculation>();
 
-                
-                //ConcurrentBag is a thread safe collection
-                var values = new ConcurrentBag<StockCalculation>();
-                
-                Parallel.ForEach(loadedStocks, (stocks, state) => {
-                    
-                    var result = CalculateExpensiveComputation(stocks);
-                    var data = new StockCalculation
-                    {
-                        Ticker = stocks.First().Ticker,
-                        Result = result
-                    };
-                    values.Add(data);
-                });
-                
+                //Parallel.ForEach(loadedStocks, (stocks, state) => {
 
+                //    var result = CalculateExpensiveComputation(stocks);
+                //    var data = new StockCalculation
+                //    {
+                //        Ticker = stocks.First().Ticker,
+                //        Result = result
+                //    };
+                //    values.Add(data);
+                //});
+                #endregion
 
-                Stocks.ItemsSource = loadedStocks.SelectMany(stocks => stocks);
+                Notes.Text = total.ToString();
+                //Stocks.ItemsSource = loadedStocks.SelectMany(stocks => stocks);
             }
             catch (Exception ex)
             {
