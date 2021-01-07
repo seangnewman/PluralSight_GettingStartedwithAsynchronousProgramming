@@ -68,51 +68,40 @@ namespace StockAnalyzer.Windows
                 }
                 #endregion
 
-                var loadedStocks = (await Task.WhenAll(tickerLoadingTasks)).SelectMany(stocks => stocks);
+                var loadedStocks = (await Task.WhenAll(tickerLoadingTasks));
 
-                //Note that Parallel.Invoke blocks UI thread
-                Parallel.Invoke( new ParallelOptions { MaxDegreeOfParallelism = 2},
-                     () => {
-                    #region Starting
-                    Debug.WriteLine("Starting Operation 1");
-                    #endregion
-                     CalculateExpensiveComputation(loadedStocks);
-                    #region Ending
-                    Debug.WriteLine("Ending Operation 1");
-                    #endregion
-                   },
-                    () => {
-                        #region Starting
-                        Debug.WriteLine("Starting Operation 2");
-                        #endregion
-                        CalculateExpensiveComputation(loadedStocks);
-                        #region Ending
-                        Debug.WriteLine("Ending Operation 2");
-                        #endregion
-                    },
-                   () => {
-                       #region Starting
-                       Debug.WriteLine("Starting Operation 3");
-                       #endregion
-                       CalculateExpensiveComputation(loadedStocks);
-                       #region Ending
-                       Debug.WriteLine("Ending Operation 3");
-                       #endregion
-                   },
-                   () => {
-                       #region Starting
-                       Debug.WriteLine("Starting Operation 4");
-                       #endregion
-                       CalculateExpensiveComputation(loadedStocks);
-                       #region Ending
-                       Debug.WriteLine("Ending Operation 4");
-                       #endregion
-                   }
-              );
+                // var values = new List<StockCalculation>();
+
+                // Normal foreach
+                //foreach (var stocks in loadedStocks)
+                //{
+                //    var result = CalculateExpensiveComputation(stocks);
+                //    var data = new StockCalculation
+                //    {
+                //        Ticker = stocks.First().Ticker,
+                //        Result = result
+                //    };
+                //    values.Add(data);
+                //}
+
+                
+                //ConcurrentBag is a thread safe collection
+                var values = new ConcurrentBag<StockCalculation>();
+                
+                Parallel.ForEach(loadedStocks, (stocks, state) => {
+                    
+                    var result = CalculateExpensiveComputation(stocks);
+                    var data = new StockCalculation
+                    {
+                        Ticker = stocks.First().Ticker,
+                        Result = result
+                    };
+                    values.Add(data);
+                });
+                
 
 
-
-                Stocks.ItemsSource = loadedStocks;
+                Stocks.ItemsSource = loadedStocks.SelectMany(stocks => stocks);
             }
             catch (Exception ex)
             {
