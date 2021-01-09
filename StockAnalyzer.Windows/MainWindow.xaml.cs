@@ -50,16 +50,37 @@ namespace StockAnalyzer.Windows
                 Notes.Text += "Cancellation requested" + Environment.NewLine;
             });
             #endregion
-
+            #region TaskFactory attach to parent
             try
             {
-                await WorkInNotepad();
-                Notes.Text += "Notepad closed, continuation!";
+                Debug.WriteLine("Starting");
+                // Task.Run() uses this internally
+                await Task.Factory.StartNew( () => {
+                    Task.Factory.StartNew( () => {
+                        Thread.Sleep(1000);
+                        Debug.WriteLine("Completing 1");
+                    }, TaskCreationOptions.AttachedToParent);
+
+                    Task.Factory.StartNew(() => {
+                        Thread.Sleep(1000);
+                        Debug.WriteLine("Completing 2");
+                    },TaskCreationOptions.AttachedToParent);
+
+                    Task.Factory.StartNew(() => {
+                        Thread.Sleep(1000);
+                        Debug.WriteLine("Completing 3");
+                    },TaskCreationOptions.AttachedToParent);
+
+                    
+                });
+                Debug.WriteLine("Completed");
+                #endregion
+             
 
             }
             catch (Exception ex)
             {
-                Notes.Text += ex.Message + Environment.NewLine;
+                
             }
             finally
             {
