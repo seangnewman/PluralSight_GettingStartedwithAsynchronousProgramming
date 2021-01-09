@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -24,14 +25,13 @@ namespace StockAnalyzer.Windows
         }
 
         CancellationTokenSource cancellationTokenSource = null;
-        static object syncRoot = new object();
+
         private async void Search_Click(object sender, RoutedEventArgs e)
         {
             #region Before loading stock data
             var watch = new Stopwatch();
             watch.Start();
             StockProgress.Visibility = Visibility.Visible;
-            StockProgress.IsIndeterminate = true;
 
             Search.Content = "Cancel";
             #endregion
@@ -45,7 +45,6 @@ namespace StockAnalyzer.Windows
             }
 
             cancellationTokenSource = new CancellationTokenSource();
-
             cancellationTokenSource.Token.Register(() =>
             {
                 Notes.Text += "Cancellation requested" + Environment.NewLine;
@@ -54,71 +53,18 @@ namespace StockAnalyzer.Windows
 
             try
             {
-                #region Load One or Many Tickers
-                var tickers = Ticker.Text.Split(',', ' ');
+                StockProgress.IsIndeterminate = false;
+                StockProgress.Value = 0;
+                StockProgress.Maximum = Ticker.Text.Split(',', ' ').Count();
 
-                var service = new StockService();
+                var progress = new Progress<IEnumerable<StockPrice>>();
+                progress.ProgressChanged += (_, stocks) => {
+                    StockProgress.Value++;
+                    Notes.Text += $"Loaded {stocks.Count()} for {stocks.First().Ticker} " + $"{Environment.NewLine}";
 
-                var tickerLoadingTasks = new List<Task<IEnumerable<StockPrice>>>();
-                foreach (var ticker in tickers)
-                {
-                    var loadTask = service.GetStockPricesFor(ticker, cancellationTokenSource.Token);
+                };
 
-                    tickerLoadingTasks.Add(loadTask);
-                }
-                #endregion
-
-                var loadedStocks = (await Task.WhenAll(tickerLoadingTasks));
-                  
-                decimal  total = 0;
-
-                Parallel.ForEach(loadedStocks, stocks =>
-                {
-                    var value = 0m;
-                    foreach (var stock in stocks)
-                    {
-                        value += Compute(stock);
-                    }
-                    lock (syncRoot)
-                        {
-                            total += value;
-                        }
-                    
-                } );
-
-                #region  Normal ForEach Processing
-                // var values = new List<StockCalculation>();
-
-                // Normal foreach
-                //foreach (var stocks in loadedStocks)
-                //{
-                //    var result = CalculateExpensiveComputation(stocks);
-                //    var data = new StockCalculation
-                //    {
-                //        Ticker = stocks.First().Ticker,
-                //        Result = result
-                //    };
-                //    values.Add(data);
-                //}
-                #endregion
-                #region Parallel ForEach Processing
-                ////ConcurrentBag is a thread safe collection
-                //var values = new ConcurrentBag<StockCalculation>();
-
-                //Parallel.ForEach(loadedStocks, (stocks, state) => {
-
-                //    var result = CalculateExpensiveComputation(stocks);
-                //    var data = new StockCalculation
-                //    {
-                //        Ticker = stocks.First().Ticker,
-                //        Result = result
-                //    };
-                //    values.Add(data);
-                //});
-                #endregion
-
-                Notes.Text = total.ToString();
-                //Stocks.ItemsSource = loadedStocks.SelectMany(stocks => stocks);
+                await LoadStocks(progress);
             }
             catch (Exception ex)
             {
@@ -136,6 +82,31 @@ namespace StockAnalyzer.Windows
             #endregion
         }
 
+        private async Task LoadStocks(IProgress<IEnumerable<StockPrice>> progress = null)
+        {
+            var tickers = Ticker.Text.Split(',', ' ');
+
+            var service = new StockService();
+
+            var tickerLoadingTasks = new List<Task<IEnumerable<StockPrice>>>();
+            
+            foreach (var ticker in tickers)
+            {
+                var loadTask = service.GetStockPricesFor(ticker, cancellationTokenSource.Token);
+
+                loadTask = loadTask.ContinueWith(stockTask => {
+                    progress?.Report(stockTask.Result);
+                    return stockTask.Result;
+                });
+
+                tickerLoadingTasks.Add(loadTask);
+            }
+
+            var allStocks = await Task.WhenAll(tickerLoadingTasks);
+
+            Stocks.ItemsSource = allStocks.SelectMany(stocks => stocks);
+        }
+        
         private Task<List<string>> SearchForStocks(CancellationToken cancellationToken)
         {
             var loadLinesTask = Task.Run(async () =>
@@ -161,7 +132,42 @@ namespace StockAnalyzer.Windows
             return loadLinesTask;
         }
 
-        #region Helpers
+        public Task<IEnumerable<StockPrice>> GetStocksFor(string ticker)
+        {        
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                try
+                {
+                    var prices = new List<StockPrice>();
+
+                    var lines = File.ReadAllLines(@"StockPrices_Small.csv");
+
+                    foreach (var line in lines.Skip(1))
+                    {
+                        var segments = line.Split(',');
+
+                        for (var i = 0; i < segments.Length; i++) segments[i] = segments[i].Trim('\'', '"');
+                        var price = new StockPrice
+                        {
+                            Ticker = segments[0],
+                            TradeDate = DateTime.ParseExact(segments[1], "M/d/yyyy h:mm:ss tt", CultureInfo.InvariantCulture),
+                            Volume = Convert.ToInt32(segments[6], CultureInfo.InvariantCulture),
+                            Change = Convert.ToDecimal(segments[7], CultureInfo.InvariantCulture),
+                            ChangePercent = Convert.ToDecimal(segments[8], CultureInfo.InvariantCulture),
+                        };
+                        prices.Add(price);
+                    }
+
+                }
+                catch (Exception ex)
+                {
+                }
+            });
+
+            // TODO: Change this
+            return Task.FromResult<IEnumerable<StockPrice>>(null); ;
+        }
+
         Random random = new Random();
         private decimal CalculateExpensiveComputation(IEnumerable<StockPrice> stocks)
         {
@@ -182,24 +188,7 @@ namespace StockAnalyzer.Windows
 
             return computedValue;
         }
-
-        private decimal Compute(StockPrice stock)
-        {
-            Thread.Yield();
-
-            decimal x = 0;
-            for (var a = 0; a < 10; a++)
-            {
-                for (var b = 0; b < 20; b++)
-                {
-                    x += a + stock.Change;
-                }
-            }
-
-            return x;
-        }
-        #endregion
-
+        
         private void Hyperlink_OnRequestNavigate(object sender, RequestNavigateEventArgs e)
         {
             Process.Start(new ProcessStartInfo(e.Uri.AbsoluteUri));
@@ -211,11 +200,5 @@ namespace StockAnalyzer.Windows
         {
             Application.Current.Shutdown();
         }
-    }
-
-    class StockCalculation
-    {
-        public string Ticker { get; set; }
-        public decimal Result { get; set; }
     }
 }
