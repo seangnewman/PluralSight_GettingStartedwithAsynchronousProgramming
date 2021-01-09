@@ -75,8 +75,43 @@ namespace StockAnalyzer.Windows
                 });
                 Debug.WriteLine("Completed");
                 #endregion
-             
+            # region Load All Stocks
+                try
+                {
+                    StockProgress.IsIndeterminate = false;
+                    StockProgress.Value = 0;
+                    StockProgress.Maximum = Ticker.Text.Split(',', ' ').Count();
 
+                    var progress = new Progress<IEnumerable<StockPrice>>();
+                    progress.ProgressChanged += (_, stocks) => {
+                        StockProgress.Value++;
+                        Notes.Text += $"Loaded {stocks.Count()} for {stocks.First().Ticker} " + $"{Environment.NewLine}";
+
+                    };
+
+                    await LoadStocks(progress);
+                }
+                catch (Exception ex)
+                {
+                    Notes.Text += ex.Message + Environment.NewLine;
+                }
+                finally
+                {
+                    cancellationTokenSource = null;
+                }
+
+
+                #endregion
+                var operation = Task.Run( () => {
+
+                    foreach (var stocks in allStocks)
+                    {
+
+                    }
+                    Task.Factory.StartNew( () => { 
+                       
+                    });
+                });
             }
             catch (Exception ex)
             {
