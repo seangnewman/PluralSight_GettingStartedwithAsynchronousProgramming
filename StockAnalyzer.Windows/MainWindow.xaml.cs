@@ -75,21 +75,25 @@ namespace StockAnalyzer.Windows
                 });
                 Debug.WriteLine("Completed");
                 #endregion
-            # region Load All Stocks
+                
                 try
                 {
-                    StockProgress.IsIndeterminate = false;
-                    StockProgress.Value = 0;
-                    StockProgress.Maximum = Ticker.Text.Split(',', ' ').Count();
+                    #region Load All Stocks
 
-                    var progress = new Progress<IEnumerable<StockPrice>>();
-                    progress.ProgressChanged += (_, stocks) => {
-                        StockProgress.Value++;
-                        Notes.Text += $"Loaded {stocks.Count()} for {stocks.First().Ticker} " + $"{Environment.NewLine}";
+                    #endregion
 
-                    };
+                    var service = new StockService();
 
-                    await LoadStocks(progress);
+                   
+                    var operation = Task.Factory.StartNew(async (obj) => {
+
+                        var stockService = obj as StockService;
+                        var prices = await service.GetStockPricesFor("MSFT", CancellationToken.None);
+                        return prices.Take(5);
+                    }, service).Unwrap();
+
+                    var result =  await operation;
+
                 }
                 catch (Exception ex)
                 {
@@ -101,17 +105,8 @@ namespace StockAnalyzer.Windows
                 }
 
 
-                #endregion
-                var operation = Task.Run( () => {
-
-                    foreach (var stocks in allStocks)
-                    {
-
-                    }
-                    Task.Factory.StartNew( () => { 
-                       
-                    });
-                });
+                 
+            
             }
             catch (Exception ex)
             {
