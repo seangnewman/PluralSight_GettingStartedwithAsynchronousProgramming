@@ -53,18 +53,9 @@ namespace StockAnalyzer.Windows
 
             try
             {
-                StockProgress.IsIndeterminate = false;
-                StockProgress.Value = 0;
-                StockProgress.Maximum = Ticker.Text.Split(',', ' ').Count();
+                await WorkInNotepad();
+                Notes.Text += "Notepad closed, continuation!";
 
-                var progress = new Progress<IEnumerable<StockPrice>>();
-                progress.ProgressChanged += (_, stocks) => {
-                    StockProgress.Value++;
-                    Notes.Text += $"Loaded {stocks.Count()} for {stocks.First().Ticker} " + $"{Environment.NewLine}";
-
-                };
-
-                await LoadStocks(progress);
             }
             catch (Exception ex)
             {
@@ -133,9 +124,12 @@ namespace StockAnalyzer.Windows
         }
 
         public Task<IEnumerable<StockPrice>> GetStocksFor(string ticker)
-        {        
+        {
+            var source = new TaskCompletionSource<IEnumerable<StockPrice>>();
+            
             ThreadPool.QueueUserWorkItem(_ =>
             {
+
                 try
                 {
                     var prices = new List<StockPrice>();
@@ -158,16 +152,32 @@ namespace StockAnalyzer.Windows
                         prices.Add(price);
                     }
 
+                    source.SetResult(prices.Where(price => price.Ticker == ticker));
                 }
                 catch (Exception ex)
                 {
+                    source.SetException(ex);
                 }
             });
 
-            // TODO: Change this
-            return Task.FromResult<IEnumerable<StockPrice>>(null); ;
+            return source.Task;
         }
 
+        public Task WorkInNotepad()
+        {
+            var source = new TaskCompletionSource<object>();
+            var process = new Process{
+                EnableRaisingEvents = true,
+                StartInfo = new ProcessStartInfo(@"Notepad.exe") {
+                RedirectStandardError = true,
+                UseShellExecute = false
+              }
+            };
+            process.Exited += (sender, e) => {
+                source.SetResult(null);
+            };
+            return source.Task;
+        }
         Random random = new Random();
         private decimal CalculateExpensiveComputation(IEnumerable<StockPrice> stocks)
         {
