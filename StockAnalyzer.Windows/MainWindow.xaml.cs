@@ -81,28 +81,29 @@ namespace StockAnalyzer.Windows
                     #region Load All Stocks
 
                     #endregion
+                    #region Task.Factory unwrap to retun the object rather than wait wait
+                    //var service = new StockService();
 
-                    var service = new StockService();
 
-                   
-                    var operation = Task.Factory.StartNew(async (obj) => {
+                    //var operation = Task.Factory.StartNew(async (obj) => {
 
-                        var stockService = obj as StockService;
-                        var prices = await service.GetStockPricesFor("MSFT", CancellationToken.None);
-                        return prices.Take(5);
-                    }, service).Unwrap();
+                    //    var stockService = obj as StockService;
+                    //    var prices = await service.GetStockPricesFor("MSFT", CancellationToken.None);
+                    //    return prices.Take(5);
+                    //}, service).Unwrap();
 
-                    var result =  await operation;
-
+                    //var result =  await operation;
+                    #endregion
+                    Notes.Text = Ticker.Text;
                 }
-                catch (Exception ex)
-                {
-                    Notes.Text += ex.Message + Environment.NewLine;
-                }
-                finally
-                {
-                    cancellationTokenSource = null;
-                }
+                //catch (Exception ex)
+                //{
+                //    Notes.Text += ex.Message + Environment.NewLine;
+                //}
+                //finally
+                //{
+                //    cancellationTokenSource = null;
+                //}
 
 
                  
@@ -122,6 +123,17 @@ namespace StockAnalyzer.Windows
             StockProgress.Visibility = Visibility.Hidden;
             Search.Content = "Search";
             #endregion
+        }
+
+        private async Task Run()
+        {
+            var result = await Task.Run(  () => "PluralSight"              
+                );
+
+            if (result == "PluralSight")
+            {
+                Debug.WriteLine("PluralSight");
+            }
         }
 
         private async Task LoadStocks(IProgress<IEnumerable<StockPrice>> progress = null)
